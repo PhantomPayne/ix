@@ -1,0 +1,26 @@
+[package]
+name = "ix"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ix"
+path = "src/main.rs"
+
+[dependencies]
+ix-core = { path = "../ix-core" }
+ix-git = { path = "../ix-git" }
+ix-sys = { path = "../ix-sys" }
+ix-docker = { path = "../ix-docker" }
+ix-fs = { path = "../ix-fs" }
+clap = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+colored = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+fuzzy-matcher = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+git2 = { workspace = true }
