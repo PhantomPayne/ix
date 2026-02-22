@@ -92,6 +92,26 @@ impl Index {
     }
 }
 
+fn find_git_dir(start: &Path) -> Option<PathBuf> {
+    let mut current = start.to_path_buf();
+    loop {
+        let candidate = current.join(".git");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+fn cwd_hash(path: &Path) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(path.to_string_lossy().as_bytes());
+    let result = hasher.finalize();
+    hex::encode(&result[..8]) // 16 hex chars = first 8 bytes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,24 +162,4 @@ mod tests {
         let index = Index::new("test", vec![]);
         assert!(!index.is_stale());
     }
-}
-
-fn find_git_dir(start: &Path) -> Option<PathBuf> {
-    let mut current = start.to_path_buf();
-    loop {
-        let candidate = current.join(".git");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        if !current.pop() {
-            return None;
-        }
-    }
-}
-
-fn cwd_hash(path: &Path) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(path.to_string_lossy().as_bytes());
-    let result = hasher.finalize();
-    hex::encode(&result[..8]) // 16 hex chars = first 8 bytes
 }

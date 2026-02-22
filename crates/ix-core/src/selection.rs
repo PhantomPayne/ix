@@ -65,13 +65,13 @@ impl Selection {
             match sel {
                 Selector::Slot(n) => {
                     let item = index.items.iter().find(|i| i.slot == *n)
-                        .ok_or_else(|| IxError::SlotOutOfRange(*n, total))?;
+                        .ok_or(IxError::SlotOutOfRange(*n, total))?;
                     items.push(item);
                 }
                 Selector::Range(start, end) => {
                     for n in *start..=*end {
                         let item = index.items.iter().find(|i| i.slot == n)
-                            .ok_or_else(|| IxError::SlotOutOfRange(n, total))?;
+                            .ok_or(IxError::SlotOutOfRange(n, total))?;
                         items.push(item);
                     }
                 }

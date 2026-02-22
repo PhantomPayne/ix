@@ -8,6 +8,10 @@ impl SysProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for SysProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for SysProvider {
     fn name(&self) -> &str {
         "ps"
