@@ -10,6 +10,10 @@ impl FsProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for FsProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for FsProvider {
     fn name(&self) -> &str {
         "ls"

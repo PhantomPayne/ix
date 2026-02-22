@@ -11,6 +11,10 @@ impl DockerProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for DockerProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for DockerProvider {
     fn name(&self) -> &str {
         "docker"
@@ -79,13 +83,7 @@ impl Provider for DockerProvider {
             let label = format!("{name} ({image})");
 
             let state = container.state.as_deref().unwrap_or("unknown");
-            let status_str = match state {
-                "running" => "running",
-                "exited" => "exited",
-                "paused" => "paused",
-                "created" => "created",
-                _ => state,
-            };
+            let status_str = state;
 
             let group = if state == "running" { "running" } else { "stopped" };
 

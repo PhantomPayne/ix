@@ -8,6 +8,10 @@ impl GitStatusProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for GitStatusProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for GitStatusProvider {
     fn name(&self) -> &str {
         "git-status"

@@ -8,6 +8,10 @@ impl GitBranchProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for GitBranchProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for GitBranchProvider {
     fn name(&self) -> &str {
         "git-branches"

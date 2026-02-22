@@ -8,6 +8,10 @@ impl GitStashProvider {
     pub fn new() -> Self { Self }
 }
 
+impl Default for GitStashProvider {
+    fn default() -> Self { Self::new() }
+}
+
 impl Provider for GitStashProvider {
     fn name(&self) -> &str {
         "git-stash"
