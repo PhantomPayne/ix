@@ -1,0 +1,9 @@
+[package]
+name = "ix-sys"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ix-core = { path = "../ix-core" }
+sysinfo = { workspace = true }
+anyhow = { workspace = true }

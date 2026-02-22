@@ -1,0 +1,9 @@
+[package]
+name = "ix-git"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ix-core = { path = "../ix-core" }
+git2 = { workspace = true }
+anyhow = { workspace = true }
