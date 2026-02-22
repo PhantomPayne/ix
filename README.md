@@ -19,10 +19,53 @@ $ git add $(ix 1 2)
 
 ## Installation
 
-Build from source with Cargo:
+### Shell script (recommended)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/PhantomPayne/ix/main/install.sh | sh
+```
+
+Downloads the right pre-built binary for your platform to `~/.local/bin/ix`.
+Works on Linux (x86\_64, ARM64) and macOS (Intel, Apple Silicon). No compiler
+or system libraries required.
+
+Make sure `~/.local/bin` is in your `PATH`:
 
 ```zsh
-cargo install --path crates/ix-cli
+# ~/.zshrc
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### cargo-binstall
+
+Downloads the pre-built binary via Cargo tooling — no compilation needed:
+
+```zsh
+cargo install cargo-binstall
+cargo binstall ix
+```
+
+### cargo install (compile from source)
+
+```zsh
+cargo install --git https://github.com/PhantomPayne/ix ix
+```
+
+### Manual
+
+Download the binary for your platform from the
+[GitHub Releases](https://github.com/PhantomPayne/ix/releases) page:
+
+| Platform | Binary |
+|----------|--------|
+| Linux x86\_64 | `ix-linux-x86_64` |
+| Linux ARM64 | `ix-linux-aarch64` |
+| macOS Intel | `ix-macos-x86_64` |
+| macOS Apple Silicon | `ix-macos-aarch64` |
+
+```zsh
+chmod +x ix-macos-aarch64
+mv ix-macos-aarch64 ~/.local/bin/ix
 ```
 
 ---

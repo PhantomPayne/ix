@@ -2,6 +2,20 @@
 name = "ix"
 version = "0.1.0"
 edition = "2021"
+description = "Assign short numeric slots to anything, expand them anywhere"
+repository = "https://github.com/PhantomPayne/ix"
+license = "MIT"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/ix-{ target }"
+bin-dir = "ix"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides]
+"x86_64-unknown-linux-musl" = { pkg-url = "{ repo }/releases/download/v{ version }/ix-linux-x86_64" }
+"aarch64-unknown-linux-gnu" = { pkg-url = "{ repo }/releases/download/v{ version }/ix-linux-aarch64" }
+"x86_64-apple-darwin" = { pkg-url = "{ repo }/releases/download/v{ version }/ix-macos-x86_64" }
+"aarch64-apple-darwin" = { pkg-url = "{ repo }/releases/download/v{ version }/ix-macos-aarch64" }
 
 [[bin]]
 name = "ix"
