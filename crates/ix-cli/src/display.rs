@@ -16,6 +16,9 @@ pub fn print_index(index: &Index) {
         }
     }
 
+    let max_slot = index.items.iter().map(|i| i.slot).max().unwrap_or(1);
+    let slot_width = max_slot.to_string().len();
+
     for group in &seen_groups {
         // Print group header
         if let Some(g) = group {
@@ -25,14 +28,14 @@ pub fn print_index(index: &Index) {
 
         // Print items in this group
         for item in index.items.iter().filter(|i| &i.group == group) {
-            print_item(item);
+            print_item(item, slot_width);
         }
     }
     println!();
 }
 
-fn print_item(item: &Item) {
-    let slot = format!("[{}]", item.slot).bold();
+fn print_item(item: &Item, slot_width: usize) {
+    let slot = format!("[{:>width$}]", item.slot, width = slot_width).bold();
     let status = format_status(item.status.as_deref().unwrap_or(""));
     let label = &item.label;
     println!("  {slot} {status}  {label}");
