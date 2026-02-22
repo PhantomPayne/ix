@@ -12,6 +12,22 @@ pub enum Selector {
 pub struct Selection(pub Vec<Selector>);
 
 impl Selection {
+    /// Expand all selectors into a flat, ordered list of slot numbers.
+    pub fn slots(&self) -> Vec<usize> {
+        let mut result = Vec::new();
+        for sel in &self.0 {
+            match sel {
+                Selector::Slot(n) => result.push(*n),
+                Selector::Range(start, end) => {
+                    for n in *start..=*end {
+                        result.push(n);
+                    }
+                }
+            }
+        }
+        result
+    }
+
     /// Parse a slice of strings into a Selection.
     ///
     /// Supports:
@@ -125,5 +141,23 @@ mod tests {
     fn test_parse_multiple_args() {
         let sel = Selection::parse(&["1", "3"]).unwrap();
         assert_eq!(sel.0, vec![Selector::Slot(1), Selector::Slot(3)]);
+    }
+
+    #[test]
+    fn test_selection_parses_range() {
+        let sel = Selection::parse(&["1-3"]).unwrap();
+        assert_eq!(sel.slots(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_selection_parses_comma_separated() {
+        let sel = Selection::parse(&["1,3,5"]).unwrap();
+        assert_eq!(sel.slots(), vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn test_selection_parses_mixed() {
+        let sel = Selection::parse(&["1,3", "5-7"]).unwrap();
+        assert_eq!(sel.slots(), vec![1, 3, 5, 6, 7]);
     }
 }

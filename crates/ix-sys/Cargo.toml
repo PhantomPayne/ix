@@ -7,3 +7,6 @@ edition = "2021"
 ix-core = { path = "../ix-core" }
 sysinfo = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -92,6 +92,58 @@ impl Index {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::item::Item;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_index_roundtrip() {
+        let items = vec![
+            Item::new(1, "/path/to/foo.rs", "foo.rs")
+                .with_status("M")
+                .with_group("unstaged"),
+            Item::new(2, "/path/to/bar.rs", "bar.rs")
+                .with_status("??")
+                .with_group("untracked"),
+        ];
+        let index = Index::new("git-status", items.clone());
+
+        let td = tempdir().unwrap();
+        let path = td.path().join("ix-index");
+        index.write(&path).unwrap();
+        let loaded = Index::read(&path).unwrap();
+
+        assert_eq!(index.provider, loaded.provider);
+        assert_eq!(index.items.len(), loaded.items.len());
+        for (orig, loaded) in index.items.iter().zip(loaded.items.iter()) {
+            assert_eq!(orig.slot, loaded.slot);
+            assert_eq!(orig.raw, loaded.raw);
+            assert_eq!(orig.label, loaded.label);
+            assert_eq!(orig.status, loaded.status);
+            assert_eq!(orig.group, loaded.group);
+        }
+    }
+
+    #[test]
+    fn test_index_stale_after_threshold() {
+        let index = Index {
+            provider: "test".into(),
+            // Set timestamp far in the past
+            captured_at_secs: 0,
+            items: vec![],
+        };
+        assert!(index.is_stale());
+    }
+
+    #[test]
+    fn test_index_not_stale_when_fresh() {
+        let index = Index::new("test", vec![]);
+        assert!(!index.is_stale());
+    }
+}
+
 fn find_git_dir(start: &Path) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
     loop {

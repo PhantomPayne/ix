@@ -5,4 +5,8 @@ edition = "2021"
 
 [dependencies]
 ix-core = { path = "../ix-core" }
+git2 = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

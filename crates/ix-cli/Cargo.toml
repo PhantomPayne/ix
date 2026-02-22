@@ -20,3 +20,7 @@ colored = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 fuzzy-matcher = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+git2 = { workspace = true }

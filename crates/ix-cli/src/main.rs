@@ -11,7 +11,7 @@ use ix_core::provider::Context as IxContext;
 use ix_docker::DockerProvider;
 use ix_fs::FsProvider;
 use ix_git::{GitBranchProvider, GitStashProvider, GitStatusProvider};
-use ix_sys::ProcessProvider;
+use ix_sys::SysProvider;
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -94,20 +94,20 @@ fn run_list_command(provider_name: Option<&str>, ctx: &IxContext) -> Result<()> 
     let index_path = Index::index_path(ctx);
 
     let items = match provider_name {
-        Some("git-status") => GitStatusProvider.list(ctx),
-        Some("git-branches") => GitBranchProvider.list(ctx),
-        Some("git-stash") => GitStashProvider.list(ctx),
-        Some("ps") => ProcessProvider.list(ctx),
-        Some("ls") => FsProvider.list(ctx),
-        Some("docker") => DockerProvider.list(ctx),
+        Some("git-status") => GitStatusProvider::new().list(ctx),
+        Some("git-branches") => GitBranchProvider::new().list(ctx),
+        Some("git-stash") => GitStashProvider::new().list(ctx),
+        Some("ps") => SysProvider::new().list(ctx),
+        Some("ls") => FsProvider::new().list(ctx),
+        Some("docker") => DockerProvider::new().list(ctx),
         Some(other) => bail!("Unknown provider: {other}"),
 
         None => {
             // Auto-detect
             if GitStatusProvider::detect(ctx) {
-                GitStatusProvider.list(ctx)
+                GitStatusProvider::new().list(ctx)
             } else {
-                FsProvider.list(ctx)
+                FsProvider::new().list(ctx)
             }
         }
     };

@@ -8,3 +8,6 @@ ix-core = { path = "../ix-core" }
 bollard = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
