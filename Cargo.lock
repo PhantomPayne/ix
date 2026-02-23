@@ -913,6 +913,7 @@ dependencies = [
  "ix-git",
  "ix-sys",
  "ratatui",
+ "serde_json",
  "tempfile",
  "tokio",
 ]
