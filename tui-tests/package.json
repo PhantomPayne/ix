@@ -1,0 +1,13 @@
+{
+  "name": "ix-tui-tests",
+  "version": "1.0.0",
+  "description": "TUI tests for ix using @microsoft/tui-test",
+  "private": true,
+  "scripts": {
+    "test": "tui-test"
+  },
+  "devDependencies": {
+    "@microsoft/tui-test": "^0.1.0",
+    "typescript": "^5.0.0"
+  }
+}

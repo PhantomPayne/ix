@@ -25,6 +25,48 @@ jobs:
       - name: cargo test
         run: cargo test
 
+  test-shell-widgets:
+    name: Shell Widget Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build ix
+        run: cargo build --release
+
+      - name: Install fish
+        run: sudo apt-get install -y fish
+
+      - name: Run shell widget tests
+        run: bash tui-tests/shell/run_shell_tests.sh
+        env:
+          PATH: "${{ github.workspace }}/target/release:$PATH"
+
+  test-tui:
+    name: TUI Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build ix
+        run: cargo build --release
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install tui-test dependencies
+        run: npm install
+        working-directory: tui-tests
+
+      - name: Run TUI tests
+        run: IX_BIN=../target/release/ix npm test
+        working-directory: tui-tests
+
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}

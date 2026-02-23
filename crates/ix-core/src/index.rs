@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::error::{IxError, Result};
 use crate::item::Item;
@@ -73,43 +72,21 @@ impl Index {
         sel.resolve(self)
     }
 
-    /// Returns the index path for the current context.
-    /// - Inside a git repo: `.git/ix-index`
-    /// - Otherwise: `~/.cache/ix/<short-cwd-hash>/index.json`
-    pub fn index_path(ctx: &Context) -> PathBuf {
-        // Try to find a .git directory
-        if let Some(git_dir) = find_git_dir(&ctx.cwd) {
-            return git_dir.join("ix-index");
-        }
-
-        // Fall back to ~/.cache/ix/<hash>/index.json
-        let hash = cwd_hash(&ctx.cwd);
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("ix")
-            .join(hash);
-        cache_dir.join("index.json")
+    /// Returns the index path keyed to the current terminal session.
+    ///
+    /// Uses `$IX_SESSION` (set by `ix init <shell>` to `$$`, the shell PID) so each
+    /// terminal session has its own isolated index at `/tmp/ix-<session>`.
+    /// Falls back to the current process PID if `IX_SESSION` is not set.
+    pub fn index_path(_ctx: &Context) -> PathBuf {
+        Self::session_index_path()
     }
-}
 
-fn find_git_dir(start: &Path) -> Option<PathBuf> {
-    let mut current = start.to_path_buf();
-    loop {
-        let candidate = current.join(".git");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        if !current.pop() {
-            return None;
-        }
+    /// Returns the session-keyed index path (used by both `index_path` and CLI helpers).
+    pub fn session_index_path() -> PathBuf {
+        let session = std::env::var("IX_SESSION")
+            .unwrap_or_else(|_| std::process::id().to_string());
+        std::env::temp_dir().join(format!("ix-{}", session))
     }
-}
-
-fn cwd_hash(path: &Path) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(path.to_string_lossy().as_bytes());
-    let result = hasher.finalize();
-    hex::encode(&result[..8]) // 16 hex chars = first 8 bytes
 }
 
 #[cfg(test)]
