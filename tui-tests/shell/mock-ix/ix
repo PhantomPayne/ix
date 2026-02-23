@@ -1,0 +1,24 @@
+#!/bin/sh
+# mock ix — intercepts --pick calls for shell widget tests.
+#
+# Controlled by environment variables:
+#   MOCK_IX_OUTPUT   What to print on --pick (empty = simulate abort)
+#   MOCK_IX_EXIT     Exit code for --pick (default 0; set to 1 for abort)
+
+if [ "$1" = "--pick" ]; then
+    output="${MOCK_IX_OUTPUT:-}"
+    code="${MOCK_IX_EXIT:-0}"
+    if [ -n "$output" ]; then
+        printf '%s' "$output"
+    fi
+    exit "$code"
+fi
+
+# For any other invocation (e.g. ix gs, ix init), exec the real ix
+# by looking it up in PATH excluding this mock directory.
+real_ix=$(PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v "mock-ix" | tr '\n' ':' | sed 's/:$//') command -v ix 2>/dev/null)
+if [ -n "$real_ix" ]; then
+    exec "$real_ix" "$@"
+fi
+
+exit 0
