@@ -57,10 +57,7 @@ impl<'a> App<'a> {
             return vec![];
         }
         // The input may contain commas or spaces as separators
-        let args: Vec<&str> = self.input
-            .split_whitespace()
-            .flat_map(|s| std::iter::once(s))
-            .collect();
+        let args: Vec<&str> = self.input.split_whitespace().collect();
         if args.is_empty() {
             return vec![];
         }
