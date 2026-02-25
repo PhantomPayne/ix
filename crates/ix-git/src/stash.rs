@@ -1,15 +1,16 @@
-use ix_core::{Context, Item, Provider, ProviderOption};
+use crate::{detect_git, open_repo};
 use ix_core::error::{IxError, Result};
-use git2::Repository;
+use ix_core::{Context, Item, Provider};
+use shell_escape::escape;
+use std::borrow::Cow;
 
+#[derive(Default)]
 pub struct GitStashProvider;
 
 impl GitStashProvider {
-    pub fn new() -> Self { Self }
-}
-
-impl Default for GitStashProvider {
-    fn default() -> Self { Self::new() }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Provider for GitStashProvider {
@@ -17,27 +18,20 @@ impl Provider for GitStashProvider {
         "git-stash"
     }
 
-    fn detect(ctx: &Context) -> bool {
-        Repository::discover(&ctx.cwd).is_ok()
-    }
-
-    fn options() -> Vec<ProviderOption> {
-        vec![]
+    fn detect(&self, ctx: &Context) -> bool {
+        detect_git(ctx)
     }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>> {
-        let mut repo = Repository::discover(&ctx.cwd)
-            .map_err(|e| IxError::Provider(format!("git: {e}")))?;
+        let mut repo = open_repo(ctx)?;
 
         let mut items = Vec::new();
-        let mut slot = 1usize;
 
         repo.stash_foreach(|index, message, _oid| {
             let raw = format!("stash@{{{index}}}");
             let label = format!("[{index}] {message}");
-            let item = Item::new(slot, &raw, &label);
+            let item = Item::new(0, &raw, &label);
             items.push(item);
-            slot += 1;
             true // continue iterating
         })
         .map_err(|e| IxError::Provider(format!("stash foreach: {e}")))?;
@@ -46,39 +40,20 @@ impl Provider for GitStashProvider {
     }
 
     fn preview_cmd(&self, item: &Item) -> Option<String> {
-        Some(format!("git stash show -p {}", shell_quote(&item.raw)))
+        Some(format!(
+            "git stash show -p {}",
+            escape(Cow::Borrowed(&item.raw))
+        ))
     }
 }
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
+#[cfg(test)]
+use ix_core::test_utils::ctx_path as ctx;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
-    use tempfile::tempdir;
-
-    fn make_repo() -> (tempfile::TempDir, git2::Repository) {
-        let td = tempdir().unwrap();
-        let repo = git2::Repository::init(td.path()).unwrap();
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "test").unwrap();
-        config.set_str("user.email", "test@test.com").unwrap();
-        (td, repo)
-    }
-
-    fn make_initial_commit(repo: &git2::Repository) {
-        let sig = repo.signature().unwrap();
-        let tree_id = repo.index().unwrap().write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
-    }
-
-    fn ctx(path: &Path) -> Context {
-        Context::new(path.to_path_buf())
-    }
+    use crate::test_helpers::{make_initial_commit, make_repo};
 
     #[test]
     fn test_stash_lists_stashes() {

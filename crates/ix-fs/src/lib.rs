@@ -1,17 +1,22 @@
+mod fd;
+
+pub use fd::FdProvider;
+
 use std::fs;
 use std::path::PathBuf;
 
-use ix_core::{Context, Item, Provider, ProviderOption};
 use ix_core::error::{IxError, Result};
+use ix_core::{Context, Item, Provider};
+use shell_escape::escape;
+use std::borrow::Cow;
 
+#[derive(Default)]
 pub struct FsProvider;
 
 impl FsProvider {
-    pub fn new() -> Self { Self }
-}
-
-impl Default for FsProvider {
-    fn default() -> Self { Self::new() }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Provider for FsProvider {
@@ -19,23 +24,8 @@ impl Provider for FsProvider {
         "ls"
     }
 
-    fn detect(_ctx: &Context) -> bool {
+    fn detect(&self, _ctx: &Context) -> bool {
         true // always available
-    }
-
-    fn options() -> Vec<ProviderOption> {
-        vec![
-            ProviderOption {
-                long: "hidden".into(),
-                short: Some('a'),
-                help: "Include hidden files (dotfiles)".into(),
-            },
-            ProviderOption {
-                long: "all".into(),
-                short: Some('A'),
-                help: "Include hidden files AND gitignored files".into(),
-            },
-        ]
     }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>> {
@@ -51,15 +41,14 @@ impl Provider for FsProvider {
             None
         };
 
-        let read_dir = fs::read_dir(&ctx.cwd)
-            .map_err(|e| IxError::Provider(format!("read_dir: {e}")))?;
+        let read_dir =
+            fs::read_dir(&ctx.cwd).map_err(|e| IxError::Provider(format!("read_dir: {e}")))?;
 
         let mut dirs: Vec<(String, PathBuf)> = Vec::new();
         let mut files: Vec<(String, PathBuf)> = Vec::new();
 
         for entry_result in read_dir {
-            let entry = entry_result
-                .map_err(|e| IxError::Provider(format!("dir entry: {e}")))?;
+            let entry = entry_result.map_err(|e| IxError::Provider(format!("dir entry: {e}")))?;
             let name = entry.file_name().to_string_lossy().to_string();
 
             // Filter hidden files unless requested
@@ -76,7 +65,8 @@ impl Provider for FsProvider {
                 }
             }
 
-            let file_type = entry.file_type()
+            let file_type = entry
+                .file_type()
                 .map_err(|e| IxError::Provider(format!("file type: {e}")))?;
 
             if file_type.is_dir() {
@@ -87,26 +77,21 @@ impl Provider for FsProvider {
         }
 
         // Sort alphabetically
-        dirs.sort_by(|a, b| a.0.cmp(&b.0));
-        files.sort_by(|a, b| a.0.cmp(&b.0));
+        dirs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        files.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
         let mut items = Vec::new();
-        let mut slot = 1usize;
 
         for (name, path) in dirs {
             let raw = path.to_string_lossy().to_string();
-            let item = Item::new(slot, raw, &name)
-                .with_group("dirs");
+            let item = Item::new(0, raw, &name).with_group("dirs");
             items.push(item);
-            slot += 1;
         }
 
         for (name, path) in files {
             let raw = path.to_string_lossy().to_string();
-            let item = Item::new(slot, raw, &name)
-                .with_group("files");
+            let item = Item::new(0, raw, &name).with_group("files");
             items.push(item);
-            slot += 1;
         }
 
         Ok(items)
@@ -115,29 +100,24 @@ impl Provider for FsProvider {
     fn preview_cmd(&self, item: &Item) -> Option<String> {
         let path = &item.raw;
         if item.group.as_deref() == Some("dirs") {
-            Some(format!("ls -la {}", shell_quote(path)))
+            Some(format!("ls -la {}", escape(Cow::Borrowed(path))))
         } else {
             Some(format!(
                 "bat --style=plain -- {q} 2>/dev/null || cat -- {q}",
-                q = shell_quote(path)
+                q = escape(Cow::Borrowed(path))
             ))
         }
     }
 }
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
+#[cfg(test)]
+use ix_core::test_utils::ctx_path as ctx;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
     use tempfile::tempdir;
-
-    fn ctx(path: &Path) -> Context {
-        Context::new(path.to_path_buf())
-    }
 
     #[test]
     fn test_fs_lists_files() {
@@ -170,7 +150,7 @@ mod tests {
         std::fs::write(td.path().join(".hidden"), "").unwrap();
 
         let mut c = ctx(td.path());
-        c.flags.insert("hidden".into(), "".into());
+        c.flags.insert("hidden".into());
         let items = FsProvider::new().list(&c).unwrap();
 
         assert!(items.iter().any(|i| i.label == ".hidden"));
@@ -199,7 +179,7 @@ mod tests {
         std::fs::write(td.path().join("debug.log"), "").unwrap();
 
         let mut c = ctx(td.path());
-        c.flags.insert("all".into(), "".into());
+        c.flags.insert("all".into());
         let items = FsProvider::new().list(&c).unwrap();
 
         assert!(items.iter().any(|i| i.label == "debug.log"));

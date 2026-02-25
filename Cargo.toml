@@ -5,7 +5,11 @@ members = [
     "crates/ix-sys",
     "crates/ix-docker",
     "crates/ix-fs",
-    "crates/ix-cli",
+    "crates/ix-env",
+    "crates/ix-port",
+    "crates/ix-ssh",
+    "crates/ix-cat",
+    "crates/ix-cli", "crates/ix-stdin",
 ]
 resolver = "2"
 
@@ -21,9 +25,9 @@ tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 ratatui = "0.26"
 crossterm = "0.27"
-colored = "2"
-sha2 = "0.10"
-hex = "0.4"
+shell-escape = "0.1.5"
+
+globset = "0.4"
 dirs = "5"
-fuzzy-matcher = "0.3"
 tempfile = "3"
+indexmap = "2"

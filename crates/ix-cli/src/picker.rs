@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 
 use crossterm::{
@@ -5,7 +6,6 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
@@ -15,17 +15,21 @@ use ratatui::{
     Terminal,
 };
 
+use crate::theme::StatusTheme;
 use ix_core::{Index, Item, Selection};
 
-/// Run the interactive TUI picker. Returns the selected raw strings, or None if cancelled.
-pub fn run_picker(index: &Index) -> anyhow::Result<Option<Vec<String>>> {
+/// Run the interactive TUI picker.
+///
+/// Returns the selected raw strings, or `None` if the user cancelled.
+/// Colours are drawn from `theme` which may be configured via `IX_COLORS`.
+pub fn run_picker(index: &Index, theme: &StatusTheme) -> anyhow::Result<Option<Vec<String>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, index);
+    let result = run_app(&mut terminal, index, theme);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -34,75 +38,72 @@ pub fn run_picker(index: &Index) -> anyhow::Result<Option<Vec<String>>> {
     result
 }
 
-struct App<'a> {
-    index: &'a Index,
-    input: String,
-    /// Items currently visible (after filtering)
-    visible: Vec<usize>, // indices into index.items
+pub(crate) struct App<'a> {
+    pub(crate) index: &'a Index,
+    pub(crate) input: String,
+    /// Items currently visible (after filtering by typed slot numbers)
+    pub(crate) visible: Vec<usize>, // indices into index.items
+    /// The resolved item-indices when `input` is a valid Selection, or None
+    pub(crate) resolved: Option<Vec<usize>>,
     /// Items selected via Space toggle
-    selected: Vec<usize>, // indices into index.items
-    list_state: ListState,
+    pub(crate) selected: Vec<usize>, // indices into index.items
+    pub(crate) list_state: ListState,
+    /// Slot → vec-index map for O(1) lookup (built once, immutable)
+    pub(crate) item_positions: HashMap<usize, usize>,
 }
 
 impl<'a> App<'a> {
-    fn new(index: &'a Index) -> Self {
+    pub(crate) fn new(index: &'a Index) -> Self {
         let visible = (0..index.items.len()).collect();
         let mut list_state = ListState::default();
         if !index.items.is_empty() {
             list_state.select(Some(0));
         }
+        let item_positions: HashMap<usize, usize> = index
+            .items
+            .iter()
+            .enumerate()
+            .map(|(vec_idx, item)| (item.slot, vec_idx))
+            .collect();
         Self {
             index,
             input: String::new(),
             visible,
+            resolved: None,
             selected: Vec::new(),
             list_state,
+            item_positions,
         }
     }
 
-    fn items(&self) -> &[Item] {
+    pub(crate) fn items(&self) -> &[Item] {
         &self.index.items
     }
 
-    /// Determine if the current input looks like a slot selector.
-    fn is_selector_mode(&self) -> bool {
+    pub(crate) fn update_visible(&mut self) {
         if self.input.is_empty() {
-            return false;
+            self.visible = (0..self.items().len()).collect();
+            self.resolved = None;
+            return;
         }
-        let args: Vec<&str> = self.input.split_whitespace().collect();
-        Selection::parse(&args).is_ok()
-    }
 
-    /// Items highlighted by the current selector input.
-    fn selector_highlighted(&self) -> Vec<usize> {
-        if !self.is_selector_mode() {
-            return vec![];
-        }
         let args: Vec<&str> = self.input.split_whitespace().collect();
         if let Ok(sel) = Selection::parse(&args) {
             if let Ok(items) = sel.resolve(self.index) {
-                return items.iter()
-                    .filter_map(|item| self.index.items.iter().position(|i| i.slot == item.slot))
+                let indices: Vec<usize> = items
+                    .iter()
+                    .filter_map(|item| self.item_positions.get(&item.slot).copied())
                     .collect();
+                self.visible = indices.clone();
+                self.resolved = Some(indices);
+            } else {
+                self.visible.clear();
+                self.resolved = None;
             }
+        } else {
+            self.visible.clear();
+            self.resolved = None;
         }
-        vec![]
-    }
-
-    fn update_visible(&mut self) {
-        if self.input.is_empty() || self.is_selector_mode() {
-            self.visible = (0..self.items().len()).collect();
-            return;
-        }
-        // Fuzzy filter
-        let matcher = SkimMatcherV2::default();
-        let mut scored: Vec<(usize, i64)> = self.items().iter().enumerate()
-            .filter_map(|(i, item)| {
-                matcher.fuzzy_match(&item.label, &self.input).map(|score| (i, score))
-            })
-            .collect();
-        scored.sort_by(|a, b| b.1.cmp(&a.1)); // highest score first
-        self.visible = scored.into_iter().map(|(i, _)| i).collect();
 
         // Reset list cursor
         if !self.visible.is_empty() {
@@ -113,23 +114,27 @@ impl<'a> App<'a> {
         }
     }
 
-    fn move_up(&mut self) {
-        if self.visible.is_empty() { return; }
+    pub(crate) fn move_up(&mut self) {
+        if self.visible.is_empty() {
+            return;
+        }
         let cur = self.list_state.selected().unwrap_or(0);
         if cur > 0 {
             self.list_state.select(Some(cur - 1));
         }
     }
 
-    fn move_down(&mut self) {
-        if self.visible.is_empty() { return; }
+    pub(crate) fn move_down(&mut self) {
+        if self.visible.is_empty() {
+            return;
+        }
         let cur = self.list_state.selected().unwrap_or(0);
         if cur + 1 < self.visible.len() {
             self.list_state.select(Some(cur + 1));
         }
     }
 
-    fn toggle_current(&mut self) {
+    pub(crate) fn toggle_current(&mut self) {
         if let Some(cur) = self.list_state.selected() {
             if cur < self.visible.len() {
                 let item_idx = self.visible[cur];
@@ -142,25 +147,32 @@ impl<'a> App<'a> {
         }
     }
 
-    /// Confirm: if in selector mode, use those items; if items are toggle-selected use those;
-    /// otherwise use the cursor item.
-    fn confirm(&self) -> Vec<String> {
-        if self.is_selector_mode() {
-            let highlighted = self.selector_highlighted();
-            return highlighted.iter()
+    pub(crate) fn confirm(&self) -> Vec<String> {
+        // If there are resolved items from the typed input, return those.
+        if let Some(ref indices) = self.resolved {
+            return indices
+                .iter()
                 .map(|&i| self.items()[i].raw.clone())
                 .collect();
         }
+        // If items were space-toggled, return them in slot order.
         if !self.selected.is_empty() {
-            let mut out: Vec<String> = self.selected.iter()
+            let mut out: Vec<String> = self
+                .selected
+                .iter()
                 .map(|&i| self.items()[i].raw.clone())
                 .collect();
-            // Keep original slot order
             out.sort_by_key(|raw| {
-                self.items().iter().find(|i| &i.raw == raw).map(|i| i.slot).unwrap_or(0)
+                // find slot for this raw value via position map
+                self.items()
+                    .iter()
+                    .find(|i| &i.raw == raw)
+                    .and_then(|i| self.item_positions.get(&i.slot).copied())
+                    .unwrap_or(usize::MAX)
             });
             return out;
         }
+        // Otherwise, return the cursor-highlighted item.
         if let Some(cur) = self.list_state.selected() {
             if cur < self.visible.len() {
                 let item_idx = self.visible[cur];
@@ -174,11 +186,12 @@ impl<'a> App<'a> {
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     index: &Index,
+    theme: &StatusTheme,
 ) -> anyhow::Result<Option<Vec<String>>> {
     let mut app = App::new(index);
 
     loop {
-        terminal.draw(|f| draw(f, &mut app))?;
+        terminal.draw(|f| draw(f, &mut app, theme))?;
 
         if let Event::Key(key) = event::read()? {
             match (key.modifiers, key.code) {
@@ -215,67 +228,61 @@ fn run_app(
     }
 }
 
-fn draw(f: &mut ratatui::Frame, app: &mut App) {
+pub(crate) fn draw(f: &mut ratatui::Frame, app: &mut App, theme: &StatusTheme) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(f.size());
 
     // Input box
-    let mode = if app.is_selector_mode() { "number" } else { "fuzzy" };
-    let input_block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" ix — {mode} mode "));
+    let input_block = Block::default().borders(Borders::ALL).title(" ix ");
     let input_widget = Paragraph::new(app.input.as_str())
         .block(input_block)
         .style(Style::default().fg(Color::White));
     f.render_widget(input_widget, chunks[0]);
 
     // Position cursor at end of input
-    f.set_cursor(
-        chunks[0].x + app.input.len() as u16 + 1,
-        chunks[0].y + 1,
-    );
+    f.set_cursor(chunks[0].x + app.input.len() as u16 + 1, chunks[0].y + 1);
 
-    // Item list
-    let selector_highlighted = app.selector_highlighted();
+    let max_width = app.index.max_slot_width();
 
-    let items: Vec<ListItem> = app.visible.iter().map(|&item_idx| {
-        let item = &app.index.items[item_idx];
-        let is_selected = app.selected.contains(&item_idx);
-        let is_highlighted = selector_highlighted.contains(&item_idx);
+    let items: Vec<ListItem> = app
+        .visible
+        .iter()
+        .map(|&item_idx| {
+            let item = &app.index.items[item_idx];
+            let is_selected = app.selected.contains(&item_idx);
 
-        let slot_span = Span::styled(
-            format!("[{}]", item.slot),
-            Style::default().add_modifier(Modifier::BOLD),
-        );
-        let status_str = item.status.as_deref().unwrap_or("  ");
-        let status_span = Span::styled(
-            format!(" {status_str}"),
-            style_for_status(status_str),
-        );
-        let label_span = Span::raw(format!("  {}", item.label));
+            let slot_span = Span::styled(
+                format!("[{:>width$}]", item.slot, width = max_width),
+                Style::default().add_modifier(Modifier::BOLD),
+            );
+            let (status_str, category) = item
+                .status
+                .as_ref()
+                .map(|s| (s.text.as_str(), s.category))
+                .unwrap_or(("", ix_core::item::Category::Unknown));
+            let status_span = Span::styled(
+                format!(" {status_str}"),
+                theme.ratatui_style(status_str, category),
+            );
+            let label_span = Span::raw(format!("  {}", item.label));
 
-        let check = if is_selected { "●" } else { " " };
-        let check_span = Span::styled(
-            format!("{check} "),
-            if is_selected {
-                Style::default().fg(Color::Green)
-            } else {
-                Style::default()
-            },
-        );
+            let check = if is_selected { "●" } else { " " };
+            let check_span = Span::styled(
+                format!("{check} "),
+                if is_selected {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default()
+                },
+            );
 
-        let line = Line::from(vec![check_span, slot_span, status_span, label_span]);
+            let line = Line::from(vec![check_span, slot_span, status_span, label_span]);
 
-        let style = if is_highlighted {
-            Style::default().bg(Color::DarkGray)
-        } else {
-            Style::default()
-        };
-
-        ListItem::new(line).style(style)
-    }).collect();
+            ListItem::new(line).style(Style::default())
+        })
+        .collect();
 
     let help = " ↑↓/jk navigate  Space select  Enter confirm  Esc cancel ";
     let list = List::new(items)
@@ -288,17 +295,4 @@ fn draw(f: &mut ratatui::Frame, app: &mut App) {
         .highlight_symbol("▶ ");
 
     f.render_stateful_widget(list, chunks[1], &mut app.list_state);
-}
-
-fn style_for_status(status: &str) -> Style {
-    match status {
-        "M" => Style::default().fg(Color::Yellow),
-        "A" => Style::default().fg(Color::Green),
-        "D" => Style::default().fg(Color::Red),
-        "R" | "T" => Style::default().fg(Color::Cyan),
-        "??" | "!!" => Style::default().fg(Color::DarkGray),
-        "running" => Style::default().fg(Color::Green),
-        "zombie" => Style::default().fg(Color::Red),
-        _ => Style::default().fg(Color::DarkGray),
-    }
 }

@@ -27,14 +27,26 @@ ix-git = { path = "../ix-git" }
 ix-sys = { path = "../ix-sys" }
 ix-docker = { path = "../ix-docker" }
 ix-fs = { path = "../ix-fs" }
+ix-env = { path = "../ix-env" }
+ix-port = { path = "../ix-port" }
+ix-ssh = { path = "../ix-ssh" }
 clap = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
-colored = { workspace = true }
+
+globset = { workspace = true }
+serde_json = { workspace = true }
 anyhow = { workspace = true }
+indexmap = { workspace = true }
 tokio = { workspace = true }
-fuzzy-matcher = { workspace = true }
+ix-stdin = { version = "0.1.0", path = "../ix-stdin" }
+ix-cat = { path = "../ix-cat" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 git2 = { workspace = true }
+serde_json = { workspace = true }
+ix-core = { path = "../ix-core", features = ["test_utils"] }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+indexmap = { workspace = true }

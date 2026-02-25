@@ -8,9 +8,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
+
 dirs = { workspace = true }
+indexmap = { workspace = true }
+
+[features]
+test_utils = []
 
 [dev-dependencies]
 tempfile = { workspace = true }
