@@ -48,9 +48,7 @@ impl Provider for PortProvider {
                     }
                     (tcp.local_port, "tcp", "LISTEN")
                 }
-                ProtocolSocketInfo::Udp(udp) => {
-                    (udp.local_port, "udp", "OPEN")
-                }
+                ProtocolSocketInfo::Udp(udp) => (udp.local_port, "udp", "OPEN"),
             };
 
             // Deduplicate by port + proto
@@ -59,17 +57,21 @@ impl Provider for PortProvider {
             }
 
             let raw = port.to_string();
-            
+
             // Format process info if available
             let mut proc_info = String::new();
             let mut pids = socket.associated_pids;
             pids.sort_unstable();
             pids.dedup();
-            
+
             if !pids.is_empty() {
                 // If we have sysinfo, we could lookup names, but just PIDs for now
                 // is often good enough and avoids a heavy sysinfo dependency inside ix-port.
-                let pids_str = pids.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",");
+                let pids_str = pids
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 proc_info = format!("  (pid {pids_str})");
             }
 
@@ -111,7 +113,9 @@ mod tests {
         let items = PortProvider::new().list(&ctx_default()).unwrap();
 
         assert!(
-            items.iter().any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("tcp")),
+            items
+                .iter()
+                .any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("tcp")),
             "expected to find tcp port {port}"
         );
     }
@@ -124,7 +128,9 @@ mod tests {
         let items = PortProvider::new().list(&ctx_default()).unwrap();
 
         assert!(
-            !items.iter().any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("udp")),
+            !items
+                .iter()
+                .any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("udp")),
             "expected to NOT find udp port {port} without flags"
         );
     }
@@ -139,7 +145,9 @@ mod tests {
         let items = PortProvider::new().list(&ctx).unwrap();
 
         assert!(
-            items.iter().any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("udp")),
+            items
+                .iter()
+                .any(|i| i.raw == port.to_string() && i.group.as_deref() == Some("udp")),
             "expected to find udp port {port}"
         );
     }

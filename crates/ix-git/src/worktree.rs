@@ -34,32 +34,30 @@ impl Provider for GitWorktreeProvider {
         // Always include the main repository (it is a worktree too, conceptually)
         let main_path = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
         let main_branch = head_shorthand(&repo);
-        
+
         items.push(create_worktree_item(
             &main_path,
             &main_branch.unwrap_or_else(|| String::from("HEAD")),
             ctx,
         ));
 
-        for name_opt in worktree_names.iter() {
-            if let Some(name) = name_opt {
-                let wt = repo
-                    .find_worktree(name)
-                    .map_err(|e| IxError::Provider(format!("git find_worktree {name}: {e}")))?;
+        for name in worktree_names.iter().flatten() {
+            let wt = repo
+                .find_worktree(name)
+                .map_err(|e| IxError::Provider(format!("git find_worktree {name}: {e}")))?;
 
-                let wt_repo = git2::Repository::open_from_worktree(&wt)
-                    .map_err(|e| IxError::Provider(format!("git open_from_worktree {name}: {e}")))?;
+            let wt_repo = git2::Repository::open_from_worktree(&wt)
+                .map_err(|e| IxError::Provider(format!("git open_from_worktree {name}: {e}")))?;
 
-                let branch = head_shorthand(&wt_repo);
-                
-                let wt_path = wt.path().to_path_buf();
+            let branch = head_shorthand(&wt_repo);
 
-                items.push(create_worktree_item(
-                    &wt_path,
-                    &branch.unwrap_or_else(|| name.to_string()),
-                    ctx,
-                ));
-            }
+            let wt_path = wt.path().to_path_buf();
+
+            items.push(create_worktree_item(
+                &wt_path,
+                &branch.unwrap_or_else(|| name.to_string()),
+                ctx,
+            ));
         }
 
         Ok(items)
@@ -67,10 +65,7 @@ impl Provider for GitWorktreeProvider {
 
     fn preview_cmd(&self, item: &Item) -> Option<String> {
         // We could run `git status` in the worktree directory if we want, or `git log`
-        Some(format!(
-            "git -C \"{}\" log --oneline -15",
-            item.raw
-        ))
+        Some(format!("git -C \"{}\" log --oneline -15", item.raw))
     }
 }
 
@@ -82,21 +77,21 @@ fn head_shorthand(repo: &git2::Repository) -> Option<String> {
 
 fn create_worktree_item(path: &Path, branch_name: &str, ctx: &Context) -> Item {
     let path_str = path.to_string_lossy().to_string();
-    
+
     // Format label to show branch name clearly
-    let label = format!("{branch_name}");
-    
+    let label = branch_name.to_string();
+
     // Check if this is the current directory's worktree
     let is_current = is_path_in_dir(&ctx.cwd, path);
-    
+
     let mut item = Item::new(0, &path_str, &label)
         .with_group("worktrees")
         .with_status(&path_str, Category::Neutral);
-        
+
     if is_current {
         item = item.with_status("*", Category::Positive);
     }
-    
+
     item
 }
 

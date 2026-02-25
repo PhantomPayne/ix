@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
+use args::{Cli, Commands, OutputFormat};
 use clap::Parser;
 use ix_cat::CatProvider;
 use ix_core::provider::Context as IxContext;
@@ -17,12 +18,13 @@ use ix_core::{assign_slots, reorder_by_group, Index, Selection};
 use ix_docker::DockerProvider;
 use ix_env::EnvProvider;
 use ix_fs::{FdProvider, FsProvider};
-use ix_git::{GitBranchProvider, GitLogProvider, GitStashProvider, GitStatusProvider, GitWorktreeProvider};
+use ix_git::{
+    GitBranchProvider, GitLogProvider, GitStashProvider, GitStatusProvider, GitWorktreeProvider,
+};
 use ix_port::PortProvider;
 use ix_ssh::SshProvider;
 use ix_stdin::StdinProvider;
 use ix_sys::SysProvider;
-use args::{Cli, Commands, OutputFormat};
 use theme::StatusTheme;
 
 fn main() -> ExitCode {
@@ -94,27 +96,63 @@ fn run(cli: Cli) -> Result<()> {
         // ── Providers ──────────────────────────────────────────────────
         Some(Commands::GitStatus { ignored }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([("ignored", ignored)]));
-            run_provider(&GitStatusProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &GitStatusProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::GitBranches) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&GitBranchProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &GitBranchProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::GitLog) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&GitLogProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &GitLogProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::GitStash) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&GitStashProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &GitStashProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::GitWorktree) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&GitWorktreeProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &GitWorktreeProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Ps { all }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([("all", all), ("a", all)]));
-            run_provider(&SysProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &SysProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Ls { hidden, all }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([
@@ -123,7 +161,13 @@ fn run(cli: Cli) -> Result<()> {
                 ("all", all),
                 ("A", all),
             ]));
-            run_provider(&FsProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &FsProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Fd { hidden, all }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([
@@ -132,31 +176,73 @@ fn run(cli: Cli) -> Result<()> {
                 ("all", all),
                 ("A", all),
             ]));
-            run_provider(&FdProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &FdProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Docker { all }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([("all", all), ("a", all)]));
-            run_provider(&DockerProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &DockerProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Env) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&EnvProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &EnvProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Ports { all }) => {
             let ctx = IxContext::new(cwd).with_flags(flags_from([("all", all), ("a", all)]));
-            run_provider(&PortProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &PortProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Ssh) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&SshProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &SshProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Stdin) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&StdinProvider::new(), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &StdinProvider::new(),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
         Some(Commands::Cat { file }) => {
             let ctx = IxContext::new(cwd);
-            run_provider(&CatProvider::new(file), &ctx, &sid, &theme, cli.filter.as_deref())?;
+            run_provider(
+                &CatProvider::new(file),
+                &ctx,
+                &sid,
+                &theme,
+                cli.filter.as_deref(),
+            )?;
         }
 
         // ── Diff ───────────────────────────────────────────────────────
@@ -185,16 +271,16 @@ fn run(cli: Cli) -> Result<()> {
                 auto_detect_and_list(&ctx, &sid, &theme, cli.filter.as_deref())?;
             } else {
                 let resolved = resolve_slots(&cli.args, &sid)?;
-                
+
                 if !cli.run_command.is_empty() {
                     let mut args = cli.run_command.clone();
                     args.extend(resolved.into_iter().map(|item| item.raw.clone()));
-                    
+
                     let status = std::process::Command::new(&args[0])
                         .args(&args[1..])
                         .status()
                         .with_context(|| format!("failed to execute: {}", args[0]))?;
-                        
+
                     std::process::exit(status.code().unwrap_or(1));
                 } else {
                     format_output(&resolved, cli.output_format())?;

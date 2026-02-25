@@ -212,7 +212,6 @@ mod tests {
         assert_eq!(items[0].status.as_ref().map(|s| s.as_str()), Some("M"));
     }
 
-
     #[test]
     fn test_status_empty_repo() {
         let (td, _repo) = make_repo();

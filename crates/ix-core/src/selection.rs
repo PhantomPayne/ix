@@ -28,7 +28,10 @@ impl Selection {
             }
         }
 
-        included.into_iter().filter(|n| !excluded.contains(n)).collect()
+        included
+            .into_iter()
+            .filter(|n| !excluded.contains(n))
+            .collect()
     }
 
     /// Parses a slice of strings into a `Selection`.

@@ -38,7 +38,7 @@ impl Provider for FdProvider {
         for result in builder.build() {
             let entry = result.map_err(|e| IxError::Provider(format!("ignore: {e}")))?;
             let path = entry.path();
-            
+
             // Skip the base directory itself
             if path == ctx.cwd {
                 continue;
@@ -55,15 +55,13 @@ impl Provider for FdProvider {
             };
 
             let raw = path.to_string_lossy().to_string();
-            
+
             let group = if is_dir { "dirs" } else { "files" };
             items.push(Item::new(0, raw, &label).with_group(group));
         }
 
         // Sort alphabetically
-        items.sort_unstable_by(|a, b| {
-            a.group.cmp(&b.group).then_with(|| a.label.cmp(&b.label))
-        });
+        items.sort_unstable_by(|a, b| a.group.cmp(&b.group).then_with(|| a.label.cmp(&b.label)));
 
         Ok(items)
     }

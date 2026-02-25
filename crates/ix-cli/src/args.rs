@@ -59,7 +59,10 @@ pub struct Cli {
     pub args: Vec<String>,
 
     /// Command to execute with all resolved items appended
-    #[arg(last = true, help = "Command to run with resolved items (e.g. `ix 1-3 -- git add`)")]
+    #[arg(
+        last = true,
+        help = "Command to run with resolved items (e.g. `ix 1-3 -- git add`)"
+    )]
     pub run_command: Vec<String>,
 }
 

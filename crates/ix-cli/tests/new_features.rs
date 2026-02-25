@@ -73,10 +73,7 @@ fn test_json_output_is_valid_json() {
     let (td, _repo) = make_repo();
     std::fs::write(td.path().join("test.rs"), "").unwrap();
 
-    ix_cmd(td.path(), "json-output")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "json-output").arg("gs").output().unwrap();
 
     let out = ix_cmd(td.path(), "json-output")
         .arg("1")
@@ -101,25 +98,16 @@ fn test_diff_detects_new_items() {
     std::fs::write(td.path().join("a.rs"), "").unwrap();
 
     // First index
-    ix_cmd(td.path(), "diff-test")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "diff-test").arg("gs").output().unwrap();
 
     // Add a new file
     std::fs::write(td.path().join("b.rs"), "").unwrap();
 
     // Second index (rotates first → prev)
-    ix_cmd(td.path(), "diff-test")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "diff-test").arg("gs").output().unwrap();
 
     // Diff should show b.rs as added
-    let out = ix_cmd(td.path(), "diff-test")
-        .arg("diff")
-        .output()
-        .unwrap();
+    let out = ix_cmd(td.path(), "diff-test").arg("diff").output().unwrap();
     let stdout = String::from_utf8(out.stdout).unwrap();
 
     assert!(stdout.contains("b.rs"), "diff should show b.rs as added");
@@ -132,19 +120,13 @@ fn test_diff_detects_removed_items() {
     std::fs::write(td.path().join("y.rs"), "").unwrap();
 
     // First index with both files
-    ix_cmd(td.path(), "diff-remove")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "diff-remove").arg("gs").output().unwrap();
 
     // Remove one file
     std::fs::remove_file(td.path().join("y.rs")).unwrap();
 
     // Second index
-    ix_cmd(td.path(), "diff-remove")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "diff-remove").arg("gs").output().unwrap();
 
     // Diff should show y.rs as removed
     let out = ix_cmd(td.path(), "diff-remove")
@@ -204,10 +186,7 @@ fn test_do_verb_aborts_on_failure() {
 fn test_env_subcommand() {
     let td = tempdir().unwrap();
 
-    let out = ix_cmd(td.path(), "env-test")
-        .arg("env")
-        .output()
-        .unwrap();
+    let out = ix_cmd(td.path(), "env-test").arg("env").output().unwrap();
     let stdout = String::from_utf8(out.stdout).unwrap();
 
     assert!(stdout.contains("PATH="));
@@ -240,7 +219,7 @@ fn test_stdin_provider_auto_detect_and_negative_selection() {
     // Feed stdin to 'stdin' subcommand to build index
     index_cmd.arg("-");
     index_cmd.stdin(std::process::Stdio::piped());
-    
+
     let mut child = index_cmd.spawn().unwrap();
     {
         let stdin = child.stdin.as_mut().unwrap();

@@ -37,7 +37,12 @@ impl Provider for CatProvider {
             )));
         }
 
-        let file = File::open(&path).map_err(|e| ix_core::error::IxError::Provider(format!("Failed to open file '{}': {e}", path.display())))?;
+        let file = File::open(&path).map_err(|e| {
+            ix_core::error::IxError::Provider(format!(
+                "Failed to open file '{}': {e}",
+                path.display()
+            ))
+        })?;
         let reader = io::BufReader::new(file);
 
         let mut items = Vec::new();

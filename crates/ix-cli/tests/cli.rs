@@ -139,7 +139,10 @@ fn test_cli_filter_narrows_results() {
     let stdout = String::from_utf8(out.stdout).unwrap();
 
     assert!(stdout.contains("foo.rs"), "foo.rs should match filter");
-    assert!(!stdout.contains("bar.txt"), "bar.txt should be filtered out");
+    assert!(
+        !stdout.contains("bar.txt"),
+        "bar.txt should be filtered out"
+    );
 }
 
 #[test]
@@ -184,13 +187,19 @@ fn test_cli_filter_then_resolve() {
     println!("GS OUTPUT:\n{raw_stdout}");
 
     // Resolve slot 1 (should be baz.rs), slot 2 (should be foo.rs)
-    let out1 = ix_cmd(td.path(), "filter-resolve").arg("1").output().unwrap();
+    let out1 = ix_cmd(td.path(), "filter-resolve")
+        .arg("1")
+        .output()
+        .unwrap();
     let stdout1 = String::from_utf8(out1.stdout).unwrap();
     let stderr1 = String::from_utf8(out1.stderr).unwrap();
     println!("STDOUT: {stdout1}\nSTDERR: {stderr1}");
     assert!(stdout1.contains("baz.rs"));
 
-    let out2 = ix_cmd(td.path(), "filter-resolve").arg("2").output().unwrap();
+    let out2 = ix_cmd(td.path(), "filter-resolve")
+        .arg("2")
+        .output()
+        .unwrap();
     let stdout2 = String::from_utf8(out2.stdout).unwrap();
     assert!(stdout2.contains("foo.rs"));
 }
@@ -257,10 +266,7 @@ fn test_cli_passthrough_execution() {
     std::fs::write(td.path().join("b.rs"), "").unwrap();
     std::fs::write(td.path().join("c.rs"), "").unwrap();
 
-    ix_cmd(td.path(), "passthrough")
-        .arg("gs")
-        .output()
-        .unwrap();
+    ix_cmd(td.path(), "passthrough").arg("gs").output().unwrap();
 
     // ix 1-3 -- echo
     let out = ix_cmd(td.path(), "passthrough")
@@ -278,4 +284,3 @@ fn test_cli_passthrough_execution() {
     assert!(stdout.contains("b.rs"));
     assert!(stdout.contains("c.rs"));
 }
-

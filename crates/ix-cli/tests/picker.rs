@@ -137,10 +137,7 @@ fn test_app_input_range_resolves_multiple() {
     assert_eq!(app.visible.len(), 3);
 
     let result = app.confirm();
-    assert_eq!(
-        result,
-        vec!["/path/foo.rs", "/path/bar.rs", "/path/baz.rs"]
-    );
+    assert_eq!(result, vec!["/path/foo.rs", "/path/bar.rs", "/path/baz.rs"]);
 }
 
 #[test]
