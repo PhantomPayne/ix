@@ -70,23 +70,54 @@ mv ix-macos-aarch64 ~/.local/bin/ix
 
 ---
 
-## Zsh Setup
+## Shell Setup
 
-Add the shell integration to your `~/.zshrc`:
+Add the shell integration to your shell's config:
 
-```zsh
-eval "$(ix --shell-init)"
+**Zsh** (`~/.zshrc`) or **Bash** (`~/.bashrc`):
+
+```sh
+eval "$(ix shell-init)"
+```
+
+**Fish** (`~/.config/fish/config.fish`):
+
+```fish
+ix shell-init | source
 ```
 
 This binds **Ctrl+X** to an interactive picker. When you press Ctrl+X, `ix`
-opens a fuzzy-search UI over the last index. Select items with Space or by
+opens a TUI over the last index. Select items with Space or by
 typing slot numbers, press Enter, and the selected values are inserted at your
 cursor position.
 
+### Optional: Numeric Expansion Widget
+
+The shell script also includes an optional widget to instantly expand slot numbers (e.g. `@1-3`) directly on your command line without opening a picker or using subshells. 
+
+To enable it, bind `_ix_expand_widget` to a shortcut like **Alt+E** (`\ee`):
+
+**Zsh** (`~/.zshrc`):
+```zsh
+bindkey '\ee' _ix_expand_widget
+```
+
+**Bash** (`~/.bashrc`):
+```bash
+bind -x '"\ee": _ix_expand_widget'
+```
+
+**Fish** (`~/.config/fish/config.fish`):
+```fish
+bind \ee _ix_expand_widget
+```
+
+Once bound, type `git add @1-3` and press **Alt+E**. It will immediately expand inline to `git add README.md src/main.rs`.
+
 Reload your shell after editing:
 
-```zsh
-source ~/.zshrc
+```sh
+source ~/.zshrc   # or ~/.bashrc, or restart fish
 ```
 
 ---
@@ -104,6 +135,9 @@ ix gst      # git stash
 ix ls       # files in current directory
 ix ps       # running processes
 ix dk       # docker containers
+ix env      # environment variables
+ix port     # listening TCP ports
+ix ssh      # SSH hosts from ~/.ssh/config
 ix          # auto-detect: gs inside a git repo, ls otherwise
 ```
 
@@ -130,9 +164,41 @@ git add $(ix 1-3)
 kill $(ix 2)
 docker exec -it $(ix 1) bash
 git checkout $(ix 1)
+ssh $(ix 1)          # after `ix ssh`
 ```
 
-### 3. Interactive picker (Ctrl+X)
+### 3. Execute commands with items (`do` & `--`)
+
+Use `do` to run a command for **each** resolved item individually:
+
+```zsh
+ix 1-3 do git add {}       # git add each file
+ix 1,3 do echo {}          # echo each item
+ix 1-5 do rm {}            # delete selected files
+```
+
+`{}` is replaced with each item's raw value. Commands are executed via `sh -c`
+and abort on the first non-zero exit.
+
+Use `--` to run a **single** command with **all** resolved items appended as arguments:
+
+```zsh
+ix 1-3 -- git add          # runs: git add file1 file2 file3
+ix 1,3 -- vim              # runs: vim file1 file2
+```
+
+### 4. Output formats
+
+```zsh
+ix 1-3              # space-separated (default)
+ix 1-3 -n           # newline-separated
+ix 1-3 -0           # null-terminated (for xargs -0)
+ix 1-3 -p           # code-style paste ("item",\n)
+ix 1-3 -j           # JSON array of full Item objects
+ix 1-3 -t '{}\n'    # custom template
+```
+
+### 5. Interactive picker (Ctrl+X)
 
 Press **Ctrl+X** at any point to open the picker over the last index:
 
@@ -327,6 +393,19 @@ ix dk -a       # include stopped containers
 
 ---
 
+## Diff
+
+See what changed between the current and previous index:
+
+```zsh
+ix gs          # build first index
+# ... make some changes ...
+ix gs          # rebuild index
+ix diff        # show added/removed items
+```
+
+---
+
 ## Staleness
 
 The index is considered stale after **5 minutes**. `ix` will print a warning to
@@ -378,9 +457,17 @@ alias gst='ix gst'
 | `ix ls` | Index current directory |
 | `ix ps` | Index running processes |
 | `ix dk` | Index docker containers |
+| `ix env` | Index environment variables |
+| `ix port` | Index listening TCP ports |
+| `ix ssh` | Index SSH hosts from `~/.ssh/config` |
 | `ix <n>` | Resolve slot `n` to its raw value |
 | `ix <n>-<m>` | Resolve a range of slots |
 | `ix <n>,<m>` | Resolve a comma-separated list of slots |
-| `ix --pick` | Open interactive picker |
+| `ix <n> do <cmd>` | Execute `<cmd>` for each item (`{}` = item) |
+| `ix <n> -- <cmd>` | Execute `<cmd>` once with all items appended |
+| `ix <n> -j` | Output as JSON |
+| `ix diff` | Show changes since last index |
+| `ix pick` | Open interactive picker |
 | `ix --stale` | Exit 1 if index is older than 5 minutes |
-| `ix --shell-init` | Print shell integration snippet |
+| `ix shell-init` | Print shell integration snippet |
+

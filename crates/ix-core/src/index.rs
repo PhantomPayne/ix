@@ -1,59 +1,34 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::error::{IxError, Result};
 use crate::item::Item;
-use crate::provider::Context;
 use crate::selection::Selection;
-
-/// How old an index must be before it is considered stale.
-pub const STALE_THRESHOLD_SECS: u64 = 300; // 5 minutes
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Index {
     pub provider: String,
-    /// Stored as seconds since UNIX epoch for JSON portability.
-    pub captured_at_secs: u64,
     pub items: Vec<Item>,
 }
 
 impl Index {
     pub fn new(provider: impl Into<String>, items: Vec<Item>) -> Self {
-        let captured_at_secs = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
         Self {
             provider: provider.into(),
-            captured_at_secs,
             items,
         }
-    }
-
-    pub fn captured_at(&self) -> SystemTime {
-        SystemTime::UNIX_EPOCH + Duration::from_secs(self.captured_at_secs)
-    }
-
-    pub fn is_stale(&self) -> bool {
-        let age = SystemTime::now()
-            .duration_since(self.captured_at())
-            .unwrap_or(Duration::from_secs(u64::MAX));
-        age.as_secs() > STALE_THRESHOLD_SECS
-    }
-
-    pub fn age_secs(&self) -> u64 {
-        SystemTime::now()
-            .duration_since(self.captured_at())
-            .unwrap_or(Duration::from_secs(u64::MAX))
-            .as_secs()
     }
 
     pub fn write(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
+        }
+        // Rotate: copy current index → prev before overwriting
+        if path.exists() {
+            let prev = path.with_extension("prev.json");
+            let _ = std::fs::copy(path, &prev);
         }
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
@@ -73,59 +48,62 @@ impl Index {
         sel.resolve(self)
     }
 
-    /// Returns the index path for the current context.
-    /// - Inside a git repo: `.git/ix-index`
-    /// - Otherwise: `~/.cache/ix/<short-cwd-hash>/index.json`
-    pub fn index_path(ctx: &Context) -> PathBuf {
-        // Try to find a .git directory
-        if let Some(git_dir) = find_git_dir(&ctx.cwd) {
-            return git_dir.join("ix-index");
-        }
+    /// Returns the digit-width of the largest slot number, used to pad
+    /// slot columns consistently across display and the TUI picker.
+    pub fn max_slot_width(&self) -> usize {
+        self.items
+            .iter()
+            .map(|i| i.slot)
+            .max()
+            .unwrap_or(0)
+            .to_string()
+            .len()
+    }
 
-        // Fall back to ~/.cache/ix/<hash>/index.json
-        let hash = cwd_hash(&ctx.cwd);
+    /// Build a `slot → &Item` map for O(1) lookup during selection resolution.
+    pub fn slot_map(&self) -> HashMap<usize, &Item> {
+        self.items.iter().map(|i| (i.slot, i)).collect()
+    }
+
+    /// Returns the index path for a terminal session.
+    ///
+    /// Path: `~/.cache/ix/sessions/<session_id>/index.json`
+    pub fn index_path(session_id: &str) -> PathBuf {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("ix")
-            .join(hash);
+            .join("sessions")
+            .join(session_id);
         cache_dir.join("index.json")
     }
-}
 
-fn find_git_dir(start: &Path) -> Option<PathBuf> {
-    let mut current = start.to_path_buf();
-    loop {
-        let candidate = current.join(".git");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        if !current.pop() {
-            return None;
-        }
+    /// Returns the previous index path for a terminal session.
+    ///
+    /// Path: `~/.cache/ix/sessions/<session_id>/index.prev.json`
+    pub fn prev_path(session_id: &str) -> PathBuf {
+        let cache_dir = dirs::cache_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("ix")
+            .join("sessions")
+            .join(session_id);
+        cache_dir.join("index.prev.json")
     }
-}
-
-fn cwd_hash(path: &Path) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(path.to_string_lossy().as_bytes());
-    let result = hasher.finalize();
-    hex::encode(&result[..8]) // 16 hex chars = first 8 bytes
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::item::Item;
+    use crate::item::{Category, Item};
     use tempfile::tempdir;
 
     #[test]
     fn test_index_roundtrip() {
         let items = vec![
             Item::new(1, "/path/to/foo.rs", "foo.rs")
-                .with_status("M")
+                .with_status("M", Category::Warning)
                 .with_group("unstaged"),
             Item::new(2, "/path/to/bar.rs", "bar.rs")
-                .with_status("??")
+                .with_status("??", Category::Neutral)
                 .with_group("untracked"),
         ];
         let index = Index::new("git-status", items.clone());
@@ -147,19 +125,8 @@ mod tests {
     }
 
     #[test]
-    fn test_index_stale_after_threshold() {
-        let index = Index {
-            provider: "test".into(),
-            // Set timestamp far in the past
-            captured_at_secs: 0,
-            items: vec![],
-        };
-        assert!(index.is_stale());
-    }
-
-    #[test]
-    fn test_index_not_stale_when_fresh() {
-        let index = Index::new("test", vec![]);
-        assert!(!index.is_stale());
+    fn test_index_path_uses_session_id() {
+        let path = Index::index_path("12345");
+        assert!(path.ends_with("ix/sessions/12345/index.json"));
     }
 }

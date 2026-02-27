@@ -1,15 +1,18 @@
-use ix_core::{Context, Item, Provider, ProviderOption};
+use crate::{detect_git, open_repo};
+use git2::{Status, StatusOptions};
 use ix_core::error::{IxError, Result};
-use git2::{Repository, Status, StatusOptions};
+use ix_core::item::{Category, Item};
+use ix_core::{Context, Provider};
+use shell_escape::escape;
+use std::borrow::Cow;
 
+#[derive(Default)]
 pub struct GitStatusProvider;
 
 impl GitStatusProvider {
-    pub fn new() -> Self { Self }
-}
-
-impl Default for GitStatusProvider {
-    fn default() -> Self { Self::new() }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Provider for GitStatusProvider {
@@ -17,25 +20,15 @@ impl Provider for GitStatusProvider {
         "git-status"
     }
 
-    fn detect(ctx: &Context) -> bool {
-        Repository::discover(&ctx.cwd).is_ok()
-    }
-
-    fn options() -> Vec<ProviderOption> {
-        vec![
-            ProviderOption {
-                long: "ignored".into(),
-                short: None,
-                help: "Include gitignored files in the listing".into(),
-            },
-        ]
+    fn detect(&self, ctx: &Context) -> bool {
+        detect_git(ctx)
     }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>> {
-        let repo = Repository::discover(&ctx.cwd)
-            .map_err(|e| IxError::Provider(format!("git: {e}")))?;
+        let repo = open_repo(ctx)?;
 
-        let workdir = repo.workdir()
+        let workdir = repo
+            .workdir()
             .map(|p| p.to_path_buf())
             .ok_or_else(|| IxError::Provider("bare repository not supported".into()))?;
 
@@ -50,81 +43,69 @@ impl Provider for GitStatusProvider {
             .statuses(Some(&mut opts))
             .map_err(|e| IxError::Provider(format!("git statuses: {e}")))?;
 
-        let mut items = Vec::new();
-        let mut slot = 1usize;
+        let mut staged = Vec::new();
+        let mut unstaged = Vec::new();
+        let mut untracked = Vec::new();
+        let mut ignored = Vec::new();
 
-        // Walk staged changes first
         for entry in statuses.iter() {
             let s = entry.status();
-            if !is_staged(s) {
-                continue;
-            }
             let rel = entry.path().unwrap_or("").to_string();
             let raw = workdir.join(&rel).to_string_lossy().to_string();
-            let status_str = staged_status_str(s);
-            let item = Item::new(slot, raw, &rel)
-                .with_status(status_str)
-                .with_group("staged");
-            items.push(item);
-            slot += 1;
-        }
 
-        // Walk unstaged (modified/deleted, not untracked)
-        for entry in statuses.iter() {
-            let s = entry.status();
-            if !is_unstaged(s) {
-                continue;
+            if is_staged(s) {
+                let (status_str, category) = staged_status_str(s);
+                staged.push(
+                    Item::new(0, &raw, &rel)
+                        .with_status(status_str, category)
+                        .with_group("staged"),
+                );
             }
-            let rel = entry.path().unwrap_or("").to_string();
-            let raw = workdir.join(&rel).to_string_lossy().to_string();
-            let status_str = unstaged_status_str(s);
-            let item = Item::new(slot, raw, &rel)
-                .with_status(status_str)
-                .with_group("unstaged");
-            items.push(item);
-            slot += 1;
-        }
-
-        // Walk untracked
-        for entry in statuses.iter() {
-            let s = entry.status();
-            if !s.contains(Status::WT_NEW) {
-                continue;
+            if is_unstaged(s) {
+                let (status_str, category) = unstaged_status_str(s);
+                unstaged.push(
+                    Item::new(0, &raw, &rel)
+                        .with_status(status_str, category)
+                        .with_group("unstaged"),
+                );
             }
-            let rel = entry.path().unwrap_or("").to_string();
-            let raw = workdir.join(&rel).to_string_lossy().to_string();
-            let item = Item::new(slot, raw, &rel)
-                .with_status("??")
-                .with_group("untracked");
-            items.push(item);
-            slot += 1;
-        }
-
-        // Walk ignored (only if requested)
-        if include_ignored {
-            for entry in statuses.iter() {
-                let s = entry.status();
-                if !s.contains(Status::IGNORED) {
-                    continue;
-                }
-                let rel = entry.path().unwrap_or("").to_string();
-                let raw = workdir.join(&rel).to_string_lossy().to_string();
-                let item = Item::new(slot, raw, &rel)
-                    .with_status("!!")
-                    .with_group("ignored");
-                items.push(item);
-                slot += 1;
+            if s.contains(Status::WT_NEW) {
+                untracked.push(
+                    Item::new(0, &raw, &rel)
+                        .with_status("??", Category::Neutral)
+                        .with_group("untracked"),
+                );
+            }
+            if include_ignored && s.contains(Status::IGNORED) {
+                ignored.push(
+                    Item::new(0, &raw, &rel)
+                        .with_status("!!", Category::Neutral)
+                        .with_group("ignored"),
+                );
             }
         }
+
+        let mut items =
+            Vec::with_capacity(staged.len() + unstaged.len() + untracked.len() + ignored.len());
+        items.extend(staged);
+        items.extend(unstaged);
+        items.extend(untracked);
+        items.extend(ignored);
 
         Ok(items)
     }
 
     fn preview_cmd(&self, item: &Item) -> Option<String> {
         match item.group.as_deref() {
-            Some("staged") => Some(format!("git diff --cached -- {}", shell_quote(&item.raw))),
-            Some("unstaged") => Some(format!("git diff -- {}", shell_quote(&item.raw))),
-            _ => Some(format!("bat --style=plain -- {q} 2>/dev/null || cat -- {q}", q = shell_quote(&item.raw))),
+            Some("staged") => Some(format!(
+                "git diff --cached -- {}",
+                escape(Cow::Borrowed(&item.raw))
+            )),
+            Some("unstaged") => Some(format!("git diff -- {}", escape(Cow::Borrowed(&item.raw)))),
+            _ => Some(format!(
+                "bat --style=plain -- {q} 2>/dev/null || cat -- {q}",
+                q = escape(Cow::Borrowed(&item.raw))
+            )),
         }
     }
 }
@@ -141,59 +122,48 @@ fn is_staged(s: Status) -> bool {
 
 fn is_unstaged(s: Status) -> bool {
     s.intersects(
-        Status::WT_MODIFIED
-            | Status::WT_DELETED
-            | Status::WT_TYPECHANGE
-            | Status::WT_RENAMED,
+        Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_TYPECHANGE | Status::WT_RENAMED,
     )
 }
 
-fn staged_status_str(s: Status) -> &'static str {
-    if s.contains(Status::INDEX_NEW) { "A" }
-    else if s.contains(Status::INDEX_MODIFIED) { "M" }
-    else if s.contains(Status::INDEX_DELETED) { "D" }
-    else if s.contains(Status::INDEX_RENAMED) { "R" }
-    else if s.contains(Status::INDEX_TYPECHANGE) { "T" }
-    else { "?" }
+fn staged_status_str(s: Status) -> (&'static str, Category) {
+    if s.contains(Status::INDEX_NEW) {
+        ("A", Category::Positive)
+    } else if s.contains(Status::INDEX_MODIFIED) {
+        ("M", Category::Warning)
+    } else if s.contains(Status::INDEX_DELETED) {
+        ("D", Category::Negative)
+    } else if s.contains(Status::INDEX_RENAMED) {
+        ("R", Category::Positive)
+    } else if s.contains(Status::INDEX_TYPECHANGE) {
+        ("T", Category::Warning)
+    } else {
+        ("?", Category::Unknown)
+    }
 }
 
-fn unstaged_status_str(s: Status) -> &'static str {
-    if s.contains(Status::WT_MODIFIED) { "M" }
-    else if s.contains(Status::WT_DELETED) { "D" }
-    else if s.contains(Status::WT_RENAMED) { "R" }
-    else if s.contains(Status::WT_TYPECHANGE) { "T" }
-    else { "?" }
+fn unstaged_status_str(s: Status) -> (&'static str, Category) {
+    if s.contains(Status::WT_MODIFIED) {
+        ("M", Category::Warning)
+    } else if s.contains(Status::WT_DELETED) {
+        ("D", Category::Negative)
+    } else if s.contains(Status::WT_RENAMED) {
+        ("R", Category::Positive)
+    } else if s.contains(Status::WT_TYPECHANGE) {
+        ("T", Category::Warning)
+    } else {
+        ("?", Category::Unknown)
+    }
 }
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
+#[cfg(test)]
+use ix_core::test_utils::ctx_path as ctx;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::{make_initial_commit, make_repo};
     use std::path::Path;
-    use tempfile::tempdir;
-
-    fn make_repo() -> (tempfile::TempDir, git2::Repository) {
-        let td = tempdir().unwrap();
-        let repo = git2::Repository::init(td.path()).unwrap();
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "test").unwrap();
-        config.set_str("user.email", "test@test.com").unwrap();
-        (td, repo)
-    }
-
-    fn make_initial_commit(repo: &git2::Repository) {
-        let sig = repo.signature().unwrap();
-        let tree_id = repo.index().unwrap().write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
-    }
-
-    fn ctx(path: &Path) -> Context {
-        Context::new(path.to_path_buf())
-    }
 
     #[test]
     fn test_status_detects_untracked() {
@@ -204,7 +174,7 @@ mod tests {
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].label, "foo.rs");
-        assert_eq!(items[0].status.as_deref(), Some("??"));
+        assert_eq!(items[0].status.as_ref().map(|s| s.as_str()), Some("??"));
         assert_eq!(items[0].group.as_deref(), Some("untracked"));
     }
 
@@ -221,7 +191,7 @@ mod tests {
         let items = GitStatusProvider::new().list(&ctx(td.path())).unwrap();
 
         assert_eq!(items[0].group.as_deref(), Some("staged"));
-        assert_eq!(items[0].status.as_deref(), Some("A"));
+        assert_eq!(items[0].status.as_ref().map(|s| s.as_str()), Some("A"));
     }
 
     #[test]
@@ -239,20 +209,7 @@ mod tests {
         let items = GitStatusProvider::new().list(&ctx(td.path())).unwrap();
 
         assert_eq!(items[0].group.as_deref(), Some("unstaged"));
-        assert_eq!(items[0].status.as_deref(), Some("M"));
-    }
-
-    #[test]
-    fn test_status_assigns_sequential_slots() {
-        let (td, _repo) = make_repo();
-        std::fs::write(td.path().join("a.rs"), "").unwrap();
-        std::fs::write(td.path().join("b.rs"), "").unwrap();
-        std::fs::write(td.path().join("c.rs"), "").unwrap();
-
-        let items = GitStatusProvider::new().list(&ctx(td.path())).unwrap();
-
-        let slots: Vec<usize> = items.iter().map(|i| i.slot).collect();
-        assert_eq!(slots, vec![1, 2, 3]);
+        assert_eq!(items[0].status.as_ref().map(|s| s.as_str()), Some("M"));
     }
 
     #[test]

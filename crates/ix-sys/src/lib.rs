@@ -1,15 +1,15 @@
-use ix_core::{Context, Item, Provider, ProviderOption};
 use ix_core::error::Result;
-use sysinfo::{ProcessStatus, System, Users};
+use ix_core::item::{Category, Item};
+use ix_core::{Context, Provider};
+use sysinfo::{ProcessStatus, System};
 
+#[derive(Default)]
 pub struct SysProvider;
 
 impl SysProvider {
-    pub fn new() -> Self { Self }
-}
-
-impl Default for SysProvider {
-    fn default() -> Self { Self::new() }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Provider for SysProvider {
@@ -17,18 +17,8 @@ impl Provider for SysProvider {
         "ps"
     }
 
-    fn detect(_ctx: &Context) -> bool {
+    fn detect(&self, _ctx: &Context) -> bool {
         true // always available
-    }
-
-    fn options() -> Vec<ProviderOption> {
-        vec![
-            ProviderOption {
-                long: "all".into(),
-                short: Some('a'),
-                help: "Show all users' processes, not just current user".into(),
-            },
-        ]
     }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>> {
@@ -37,19 +27,16 @@ impl Provider for SysProvider {
         let mut sys = System::new_all();
         sys.refresh_all();
 
-        let users = Users::new_with_refreshed_list();
-
-        // Get current user name from environment
-        let current_uid = std::env::var("USER")
-            .or_else(|_| std::env::var("LOGNAME"))
-            .ok();
+        // Resolve the current process UID via sysinfo so we don't rely on
+        // environment variables that may be absent or spoofed.
+        let my_pid = sysinfo::Pid::from_u32(std::process::id());
+        let current_uid = sys.process(my_pid).and_then(|p| p.user_id().cloned());
 
         let mut items = Vec::new();
-        let mut slot = 1usize;
 
         let mut procs: Vec<_> = sys.processes().values().collect();
         // Sort by PID for stable ordering
-        procs.sort_by_key(|p| p.pid());
+        procs.sort_unstable_by_key(|p| p.pid());
 
         for process in procs {
             // Skip kernel threads (no executable path, empty cmdline on linux)
@@ -59,11 +46,8 @@ impl Provider for SysProvider {
 
             // Filter by current user unless --all
             if !show_all {
-                if let Some(ref cur_user) = current_uid {
-                    let proc_user = process.user_id()
-                        .and_then(|uid| users.get_user_by_id(uid))
-                        .map(|u| u.name().to_string());
-                    if proc_user.as_ref() != Some(cur_user) {
+                if let Some(ref cur_uid) = current_uid {
+                    if process.user_id() != Some(cur_uid) {
                         continue;
                     }
                 }
@@ -73,33 +57,33 @@ impl Provider for SysProvider {
             let name = process.name().to_string();
 
             // Build a truncated cmdline label
-            let cmdline = process.cmd().iter()
+            let cmdline = process
+                .cmd()
+                .iter()
                 .map(|a| a.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
             let label = if cmdline.is_empty() {
                 name.clone()
             } else {
-                let truncated = if cmdline.len() > 60 {
-                    format!("{}…", &cmdline[..59])
+                let truncated = if cmdline.chars().count() > 60 {
+                    format!("{}…", cmdline.chars().take(59).collect::<String>())
                 } else {
                     cmdline
                 };
                 format!("{name} {truncated}")
             };
 
-            let status_str = match process.status() {
-                ProcessStatus::Run => "running",
-                ProcessStatus::Sleep | ProcessStatus::Idle => "sleeping",
-                ProcessStatus::Zombie => "zombie",
-                ProcessStatus::Stop => "stopped",
-                _ => "unknown",
+            let (status_str, category) = match process.status() {
+                ProcessStatus::Run => ("running", Category::Positive),
+                ProcessStatus::Sleep | ProcessStatus::Idle => ("sleeping", Category::Neutral),
+                ProcessStatus::Zombie => ("zombie", Category::Negative),
+                ProcessStatus::Stop => ("stopped", Category::Warning),
+                _ => ("unknown", Category::Unknown),
             };
 
-            let item = Item::new(slot, pid.to_string(), label)
-                .with_status(status_str);
+            let item = Item::new(0, pid.to_string(), label).with_status(status_str, category);
             items.push(item);
-            slot += 1;
         }
 
         Ok(items)
@@ -111,10 +95,7 @@ impl Provider for SysProvider {
 }
 
 #[cfg(test)]
-fn ctx_default() -> Context {
-    use std::path::PathBuf;
-    Context::new(PathBuf::from("."))
-}
+use ix_core::test_utils::ctx_default;
 
 #[cfg(test)]
 mod tests {

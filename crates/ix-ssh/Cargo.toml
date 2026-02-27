@@ -1,0 +1,11 @@
+[package]
+name = "ix-ssh"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ix-core = { path = "../ix-core" }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

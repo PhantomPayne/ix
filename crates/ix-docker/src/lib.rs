@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 
-use ix_core::{Context, Item, Provider, ProviderOption};
-use ix_core::error::{IxError, Result};
-use bollard::Docker;
 use bollard::container::ListContainersOptions;
+use bollard::Docker;
+use ix_core::error::{IxError, Result};
+use ix_core::item::{Category, Item};
+use ix_core::{Context, Provider};
+use shell_escape::escape;
+use std::borrow::Cow;
 
+#[derive(Default)]
 pub struct DockerProvider;
 
 impl DockerProvider {
-    pub fn new() -> Self { Self }
-}
-
-impl Default for DockerProvider {
-    fn default() -> Self { Self::new() }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Provider for DockerProvider {
@@ -20,23 +22,8 @@ impl Provider for DockerProvider {
         "docker"
     }
 
-    fn detect(_ctx: &Context) -> bool {
-        // Try to connect to Docker; if it fails, provider is unavailable
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map(|rt| rt.block_on(async { Docker::connect_with_local_defaults().is_ok() }))
-            .unwrap_or(false)
-    }
-
-    fn options() -> Vec<ProviderOption> {
-        vec![
-            ProviderOption {
-                long: "all".into(),
-                short: Some('a'),
-                help: "Include stopped containers (default: running only)".into(),
-            },
-        ]
+    fn detect(&self, _ctx: &Context) -> bool {
+        std::path::Path::new("/var/run/docker.sock").exists()
     }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>> {
@@ -62,21 +49,29 @@ impl Provider for DockerProvider {
                 ..Default::default()
             };
 
-            docker.list_containers(Some(opts)).await
+            docker
+                .list_containers(Some(opts))
+                .await
                 .map_err(|e| IxError::Provider(format!("list containers: {e}")))
         })?;
 
         let mut items = Vec::new();
-        let mut slot = 1usize;
 
         for container in containers {
             // Prefer name over ID for readability
-            let name = container.names
+            let name = container
+                .names
                 .as_ref()
                 .and_then(|ns| ns.first())
                 .map(|n| n.trim_start_matches('/').to_string())
                 .unwrap_or_else(|| {
-                    container.id.as_deref().unwrap_or("unknown").chars().take(12).collect()
+                    container
+                        .id
+                        .as_deref()
+                        .unwrap_or("unknown")
+                        .chars()
+                        .take(12)
+                        .collect()
                 });
 
             let image = container.image.as_deref().unwrap_or("unknown");
@@ -85,32 +80,39 @@ impl Provider for DockerProvider {
             let state = container.state.as_deref().unwrap_or("unknown");
             let status_str = state;
 
-            let group = if state == "running" { "running" } else { "stopped" };
+            let group = if state == "running" {
+                "running"
+            } else {
+                "stopped"
+            };
 
-            let item = Item::new(slot, &name, &label)
-                .with_status(status_str)
+            let category = match state {
+                "running" => Category::Positive,
+                "paused" => Category::Warning,
+                "exited" => Category::Neutral,
+                "dead" | "restarting" => Category::Negative,
+                _ => Category::Unknown,
+            };
+
+            let item = Item::new(0, &name, &label)
+                .with_status(status_str, category)
                 .with_group(group);
             items.push(item);
-            slot += 1;
         }
 
         Ok(items)
     }
 
     fn preview_cmd(&self, item: &Item) -> Option<String> {
-        Some(format!("docker logs --tail 30 {}", shell_quote(&item.raw)))
+        Some(format!(
+            "docker logs --tail 30 {}",
+            escape(Cow::Borrowed(&item.raw))
+        ))
     }
 }
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
 #[cfg(test)]
-fn ctx_default() -> Context {
-    use std::path::PathBuf;
-    Context::new(PathBuf::from("."))
-}
+use ix_core::test_utils::ctx_default;
 
 #[cfg(test)]
 mod tests {
@@ -119,27 +121,48 @@ mod tests {
     use bollard::models::HostConfig;
 
     async fn setup_container(docker: &Docker, name: &str) {
-        let _ = docker.remove_container(name, Some(RemoveContainerOptions { force: true, ..Default::default() })).await;
-        docker.create_container(
-            Some(CreateContainerOptions { name, platform: None }),
-            Config {
-                image: Some("alpine:latest"),
-                cmd: Some(vec!["sleep", "30"]),
-                host_config: Some(HostConfig {
-                    auto_remove: Some(false),
+        let _ = docker
+            .remove_container(
+                name,
+                Some(RemoveContainerOptions {
+                    force: true,
                     ..Default::default()
                 }),
-                ..Default::default()
-            },
-        ).await.unwrap();
+            )
+            .await;
+        docker
+            .create_container(
+                Some(CreateContainerOptions {
+                    name,
+                    platform: None,
+                }),
+                Config {
+                    image: Some("alpine:latest"),
+                    cmd: Some(vec!["sleep", "30"]),
+                    host_config: Some(HostConfig {
+                        auto_remove: Some(false),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
         docker.start_container::<String>(name, None).await.unwrap();
     }
 
     async fn teardown_container(docker: &Docker, name: &str) {
         docker.stop_container(name, None).await.ok();
-        docker.remove_container(name, Some(RemoveContainerOptions {
-            force: true, ..Default::default()
-        })).await.ok();
+        docker
+            .remove_container(
+                name,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .ok();
     }
 
     #[tokio::test]
@@ -178,7 +201,7 @@ mod tests {
         docker.stop_container(name, None).await.unwrap();
 
         let mut c = ctx_default();
-        c.flags.insert("all".into(), "".into());
+        c.flags.insert("all".into());
         let items = DockerProvider::new().list(&c).unwrap();
         assert!(items.iter().any(|i| i.label.contains(name)));
 

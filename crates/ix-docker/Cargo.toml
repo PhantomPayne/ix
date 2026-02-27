@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ix-core = { path = "../ix-core" }
+ix-core = { path = "../ix-core", features = ["test_utils"] }
 bollard = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+shell-escape = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+

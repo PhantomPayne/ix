@@ -1,0 +1,9 @@
+[package]
+name = "ix-stdin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+ix-core = { version = "0.1.0", path = "../ix-core" }
+serde.workspace = true

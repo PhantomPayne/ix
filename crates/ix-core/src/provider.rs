@@ -1,49 +1,44 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::item::Item;
 use crate::error::Result;
+use crate::item::Item;
 
 #[derive(Debug, Clone)]
 pub struct Context {
     pub cwd: PathBuf,
-    pub env: HashMap<String, String>,
-    /// User-passed flags, e.g. {"a": "", "all": "", "hidden": ""}
-    pub flags: HashMap<String, String>,
+    /// User-passed flags, e.g. {"a", "all", "hidden"}
+    pub flags: HashSet<String>,
 }
 
 impl Context {
     pub fn new(cwd: PathBuf) -> Self {
         Self {
             cwd,
-            env: std::env::vars().collect(),
-            flags: HashMap::new(),
+            flags: HashSet::new(),
         }
     }
 
-    pub fn with_flags(mut self, flags: HashMap<String, String>) -> Self {
+    pub fn with_flags(mut self, flags: HashSet<String>) -> Self {
         self.flags = flags;
         self
     }
 
     pub fn has_flag(&self, name: &str) -> bool {
-        self.flags.contains_key(name)
+        self.flags.contains(name)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ProviderOption {
-    pub long: String,
-    pub short: Option<char>,
-    pub help: String,
 }
 
 pub trait Provider {
     fn name(&self) -> &str;
-    fn detect(ctx: &Context) -> bool where Self: Sized;
-    fn options() -> Vec<ProviderOption> where Self: Sized { vec![] }
+    fn detect(&self, _ctx: &Context) -> bool {
+        false
+    }
 
     fn list(&self, ctx: &Context) -> Result<Vec<Item>>;
     /// Returns a shell command string for the preview pane (side-effect free).
-    fn preview_cmd(&self, item: &Item) -> Option<String>;
+    /// Returns `None` by default; providers override this when they have a useful preview.
+    fn preview_cmd(&self, _item: &Item) -> Option<String> {
+        None
+    }
 }

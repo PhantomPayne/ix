@@ -8,9 +8,6 @@ pub enum IxError {
     #[error("Slot {0} not found in index (index has {1} items)")]
     SlotOutOfRange(usize, usize),
 
-    #[error("Index is stale (older than {0} seconds)")]
-    StaleIndex(u64),
-
     #[error("Failed to parse selector: {0}")]
     ParseError(String),
 

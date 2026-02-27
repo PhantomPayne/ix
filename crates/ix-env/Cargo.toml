@@ -1,15 +1,10 @@
 [package]
-name = "ix-fs"
+name = "ix-env"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 ix-core = { path = "../ix-core" }
-git2 = { workspace = true }
-anyhow = { workspace = true }
-shell-escape = { workspace = true }
-ignore = "0.4.25"
 
 [dev-dependencies]
-tempfile = { workspace = true }
 ix-core = { path = "../ix-core", features = ["test_utils"] }
